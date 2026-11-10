@@ -1,0 +1,226 @@
+Sí. Copia esto en un archivo llamado `plataformas.html` y ábrelo en tu navegador. Funciona con teclado y botones táctiles: muévete, salta, recoge las cinco estrellas y evita los pinchos.
+
+```html
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Salto Estelar</title>
+<style>
+  * { box-sizing: border-box }
+  body {
+    margin: 0; min-height: 100vh; display: grid; place-items: center;
+    background: #101426; color: #f4f5ff; font: 16px system-ui, sans-serif;
+  }
+  main { width: min(94vw, 720px); text-align: center }
+  h1 { color: #ffe17a; margin-bottom: 6px }
+  .hud { display: flex; justify-content: space-between; margin: 10px 2px }
+  canvas {
+    display: block; width: 100%; height: auto; background: #18244b;
+    border: 2px solid #6774b8; border-radius: 12px; touch-action: none;
+  }
+  .controls { display: flex; justify-content: center; gap: 12px; margin: 12px }
+  button {
+    border: 0; border-radius: 12px; background: #4657a8; color: white;
+    font-size: 20px; font-weight: bold; padding: 12px 22px; touch-action: none;
+  }
+  #restart { font-size: 16px; padding: 10px 18px }
+  .hint { color: #b8bfdf; font-size: 13px }
+</style>
+</head>
+<body>
+<main>
+  <h1>⭐ Salto Estelar</h1>
+  <p>Recoge las estrellas y evita los pinchos.</p>
+  <div class="hud">
+    <span id="score">Estrellas: 0</span>
+    <span id="status">¡A jugar!</span>
+  </div>
+  <canvas id="game" width="720" height="420"></canvas>
+  <div class="controls">
+    <button id="left" aria-label="Izquierda">◀</button>
+    <button id="jump">▲ Saltar</button>
+    <button id="right" aria-label="Derecha">▶</button>
+  </div>
+  <button id="restart">Reiniciar</button>
+  <p class="hint">Teclado: ← → o A/D para moverte; espacio, ↑ o W para saltar.</p>
+</main>
+
+<script>
+(() => {
+  const canvas = document.querySelector("#game");
+  const ctx = canvas.getContext("2d");
+  const scoreEl = document.querySelector("#score");
+  const statusEl = document.querySelector("#status");
+
+  const platforms = [
+    {x:0, y:382, w:720, h:38},
+    {x:85, y:315, w:130, h:14},
+    {x:270, y:260, w:125, h:14},
+    {x:455, y:205, w:130, h:14},
+    {x:315, y:145, w:105, h:14},
+    {x:80, y:105, w:120, h:14}
+  ];
+
+  let player, stars, keys = {}, touch = {}, score, finished, last = 0;
+
+  function reset() {
+    player = {x:35, y:340, w:26, h:34, vx:0, vy:0, grounded:false};
+    stars = [
+      {x:145,y:286}, {x:325,y:231}, {x:510,y:176},
+      {x:365,y:116}, {x:135,y:76}
+    ];
+    score = 0;
+    finished = false;
+    scoreEl.textContent = "Estrellas: 0";
+    statusEl.textContent = "¡A jugar!";
+  }
+
+  function bindButton(id, action) {
+    const button = document.getElementById(id);
+    button.addEventListener("pointerdown", e => {
+      e.preventDefault();
+      touch[action] = true;
+    });
+    ["pointerup", "pointercancel", "pointerleave"].forEach(type =>
+      button.addEventListener(type, () => touch[action] = false)
+    );
+  }
+
+  bindButton("left", "left");
+  bindButton("right", "right");
+  bindButton("jump", "jump");
+
+  addEventListener("keydown", e => {
+    const key = e.key.toLowerCase();
+    keys[key] = true;
+    if ([" ", "arrowleft", "arrowright", "arrowup"].includes(key))
+      e.preventDefault();
+  });
+  addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
+  document.querySelector("#restart").addEventListener("click", reset);
+
+  function frame(time) {
+    const dt = Math.min((time - last) / 16.67 || 1, 2);
+    last = time;
+
+    if (!finished) {
+      const left = keys.arrowleft || keys.a || touch.left;
+      const right = keys.arrowright || keys.d || touch.right;
+      const jump = keys[" "] || keys.arrowup || keys.w || touch.jump;
+
+      player.vx = (right ? 3.5 : 0) - (left ? 3.5 : 0);
+      player.x = Math.max(0, Math.min(canvas.width - player.w,
+        player.x + player.vx * dt));
+
+      if (jump && player.grounded) {
+        player.vy = -10.8;
+        player.grounded = false;
+      }
+
+      const oldY = player.y;
+      player.vy += 0.48 * dt;
+      player.y += player.vy * dt;
+      player.grounded = false;
+
+      for (const platform of platforms) {
+        const landed = player.vy >= 0 &&
+          oldY + player.h <= platform.y &&
+          player.y + player.h >= platform.y &&
+          player.x + player.w > platform.x &&
+          player.x < platform.x + platform.w;
+        if (landed) {
+          player.y = platform.y - player.h;
+          player.vy = 0;
+          player.grounded = true;
+        }
+      }
+
+      if (player.y + player.h > 370 && player.x > 525 && player.x < 635) {
+        finished = true;
+        statusEl.textContent = "¡Uy! Toca reiniciar.";
+      }
+
+      for (let i = stars.length - 1; i >= 0; i--) {
+        const star = stars[i];
+        if (player.x < star.x + 12 && player.x + player.w > star.x - 12 &&
+            player.y < star.y + 12 && player.y + player.h > star.y - 12) {
+          stars.splice(i, 1);
+          score++;
+          scoreEl.textContent = `Estrellas: ${score}`;
+        }
+      }
+
+      if (player.y > canvas.height) {
+        finished = true;
+        statusEl.textContent = "¡Caíste! Toca reiniciar.";
+      }
+      if (score === 5 && !finished) {
+        finished = true;
+        statusEl.textContent = "¡Ganaste! 🌟";
+      }
+    }
+
+    // Fondo
+    const gradient = ctx.createLinearGradient(0, 0, 0, 420);
+    gradient.addColorStop(0, "#18244b");
+    gradient.addColorStop(1, "#253a70");
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 720, 420);
+
+    // Estrellitas del cielo
+    ctx.fillStyle = "#ffffff99";
+    for (let i = 0; i < 24; i++) {
+      ctx.fillRect((i * 97 + 31) % 720, (i * 53 + 19) % 160, 2, 2);
+    }
+
+    // Plataformas
+    for (const p of platforms) {
+      ctx.fillStyle = "#66d6b3";
+      ctx.fillRect(p.x, p.y, p.w, p.h);
+      ctx.fillStyle = "#9af1d0";
+      ctx.fillRect(p.x, p.y, p.w, 4);
+    }
+
+    // Pinchos
+    ctx.fillStyle = "#ff6685";
+    for (let x = 535; x < 630; x += 18) {
+      ctx.beginPath();
+      ctx.moveTo(x, 382);
+      ctx.lineTo(x + 9, 365);
+      ctx.lineTo(x + 18, 382);
+      ctx.fill();
+    }
+
+    // Estrellas coleccionables
+    for (const s of stars) {
+      ctx.fillStyle = "#ffe17a";
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, 9, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#fff4b8";
+      ctx.beginPath();
+      ctx.arc(s.x - 3, s.y - 3, 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Personaje
+    ctx.fillStyle = "#ff9f5b";
+    ctx.fillRect(player.x, player.y, player.w, player.h);
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(player.x + 16, player.y + 8, 5, 6);
+    ctx.fillStyle = "#26304e";
+    ctx.fillRect(player.x + 18, player.y + 10, 2, 3);
+    ctx.fillStyle = "#ffcfaa";
+    ctx.fillRect(player.x + 4, player.y + 3, 15, 6);
+
+    requestAnimationFrame(frame);
+  }
+
+  reset();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
